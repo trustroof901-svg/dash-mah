@@ -17,10 +17,12 @@ interface AbItem {
 }
 interface AbCheckout {
   id: number;
+  checkout_number: string;
   created_at: string;
   email: string | null;
   phone: string | null;
   city: string | null;
+  address: string | null;
   currency: string;
   total_price: number;
   recovery_url: string;
@@ -28,18 +30,29 @@ interface AbCheckout {
   items: AbItem[];
 }
 
-// Common reasons a customer abandons checkout — call center ticks what applies.
-const REASONS = [
-  { key: "shipping_cost", label: "Shipping cost / fees too high" },
-  { key: "price", label: "Price too high / found cheaper" },
-  { key: "cod", label: "Wants Cash on Delivery" },
-  { key: "payment_failed", label: "Payment failed / no card" },
-  { key: "browsing", label: "Just browsing / not ready" },
-  { key: "checkout_issue", label: "Checkout too long / technical issue" },
-  { key: "delivery_time", label: "Delivery time too long" },
-  { key: "changed_mind", label: "Changed mind / bought elsewhere" },
-  { key: "order_by_phone", label: "Prefers to order by phone" },
-  { key: "out_of_stock", label: "Item/variant unavailable" },
+// Call-center survey — 3 dropdown questions (Arabic).
+const QUESTIONS: { key: string; label: string; options: string[] }[] = [
+  {
+    key: "q1",
+    label: "ما الذي منعك من استكمال عملية الشراء؟",
+    options: [
+      "السعر",
+      "تكلفة الشحن",
+      "ما زلت أقارن بين المنتجات",
+      "لم أجد المقاس/اللون المناسب",
+      "سبب آخر",
+    ],
+  },
+  {
+    key: "q2",
+    label: "هل كانت معلومات الموقع كافية لاتخاذ قرار الشراء؟",
+    options: ["نعم", "لا، أحتاج معلومات أكثر عن المنتج"],
+  },
+  {
+    key: "q3",
+    label: "إذا قدمنا لك عرضًا مناسبًا، هل تنوي إتمام الشراء خلال الأسبوع الحالي؟",
+    options: ["نعم", "لا", "ما زلت أفكر"],
+  },
 ];
 
 const CALL_STATUSES = [
@@ -51,11 +64,11 @@ const CALL_STATUSES = [
 ];
 
 interface Followup {
-  reasons: string[];
+  answers: Record<string, string>; // { q1, q2, q3 }
   call_status: string;
   note: string;
 }
-const emptyFollowup = (): Followup => ({ reasons: [], call_status: "not_called", note: "" });
+const emptyFollowup = (): Followup => ({ answers: {}, call_status: "not_called", note: "" });
 
 export default function AbandonedPage() {
   const supabase = useMemo(() => createBrowserClient(), []);
@@ -83,8 +96,11 @@ export default function AbandonedPage() {
 
       const map: Record<string, Followup> = {};
       for (const f of fRes.data ?? []) {
+        // `reasons` jsonb now holds the survey answers object { q1, q2, q3 }.
+        const answers =
+          f.reasons && !Array.isArray(f.reasons) && typeof f.reasons === "object" ? f.reasons : {};
         map[f.checkout_id] = {
-          reasons: Array.isArray(f.reasons) ? f.reasons : [],
+          answers,
           call_status: f.call_status ?? "not_called",
           note: f.note ?? "",
         };
@@ -109,11 +125,8 @@ export default function AbandonedPage() {
     setSaved((s) => ({ ...s, [key]: false }));
   };
 
-  const toggleReason = (id: number, reason: string) => {
-    const cur = fu(id).reasons;
-    update(id, {
-      reasons: cur.includes(reason) ? cur.filter((r) => r !== reason) : [...cur, reason],
-    });
+  const setAnswer = (id: number, qKey: string, value: string) => {
+    update(id, { answers: { ...fu(id).answers, [qKey]: value } });
   };
 
   const save = async (id: number) => {
@@ -124,7 +137,7 @@ export default function AbandonedPage() {
       const { error: e } = await supabase.from("abandoned_followups").upsert(
         {
           checkout_id: key,
-          reasons: f.reasons,
+          reasons: f.answers, // jsonb object { q1, q2, q3 }
           call_status: f.call_status,
           note: f.note,
           updated_at: new Date().toISOString(),
@@ -225,7 +238,7 @@ export default function AbandonedPage() {
                         {c.customer_name || c.email || c.phone || "Unknown customer"}
                       </div>
                       <div className="text-xs text-gray-400">
-                        {new Date(c.created_at).toLocaleString()} · {c.items.length} item(s)
+                        {c.checkout_number} · {new Date(c.created_at).toLocaleString()} · {c.items.length} item(s)
                         {c.phone ? ` · ${c.phone}` : ""}
                       </div>
                     </div>
@@ -243,10 +256,12 @@ export default function AbandonedPage() {
                       <div>
                         <h3 className="mb-2 text-xs font-semibold uppercase text-gray-500">Customer</h3>
                         <div className="mb-4 space-y-1 rounded-lg border border-gray-200 bg-white p-3 text-sm">
+                          <Row label="Checkout #" value={c.checkout_number} copyable />
                           <Row label="Name" value={c.customer_name || "—"} />
                           <Row label="Phone" value={c.phone || "—"} copyable />
                           <Row label="Email" value={c.email || "—"} copyable />
                           <Row label="City" value={c.city || "—"} />
+                          <Row label="Address" value={c.address || "—"} copyable />
                         </div>
 
                         <h3 className="mb-2 text-xs font-semibold uppercase text-gray-500">
@@ -276,19 +291,23 @@ export default function AbandonedPage() {
                       {/* RIGHT: call-center follow-up */}
                       <div className="rounded-lg border border-gray-200 bg-white p-4">
                         <h3 className="mb-2 text-xs font-semibold uppercase text-gray-500">
-                          Why didn’t they complete? (call center)
+                          استبيان الكول سنتر · Call-center survey
                         </h3>
-                        <div className="mb-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                          {REASONS.map((r) => (
-                            <label key={r.key} className="flex items-center gap-2 text-sm text-gray-700">
-                              <input
-                                type="checkbox"
-                                checked={f.reasons.includes(r.key)}
-                                onChange={() => toggleReason(c.id, r.key)}
-                                className="h-4 w-4 rounded border-gray-300 text-indigo-600"
-                              />
-                              {r.label}
-                            </label>
+                        <div className="mb-3 space-y-3" dir="rtl">
+                          {QUESTIONS.map((q) => (
+                            <div key={q.key}>
+                              <label className="mb-1 block text-sm font-medium text-gray-700">{q.label}</label>
+                              <select
+                                value={f.answers[q.key] ?? ""}
+                                onChange={(e) => setAnswer(c.id, q.key, e.target.value)}
+                                className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                              >
+                                <option value="">— اختر —</option>
+                                {q.options.map((opt) => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                            </div>
                           ))}
                         </div>
 

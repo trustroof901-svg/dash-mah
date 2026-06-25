@@ -27,12 +27,20 @@ export async function GET(req: Request) {
       });
     }
 
+    const fmtAddr = (a: typeof checkouts[number]["shipping_address"]) => {
+      if (!a) return null;
+      return [a.address1, a.address2, a.city, a.province, a.country, a.zip]
+        .filter((x) => x && String(x).trim())
+        .join(", ");
+    };
+
     // Resolve storefront handles so items link to the public product page.
     const ids = checkouts.flatMap((c) => (c.line_items ?? []).map((li) => li.product_id ?? 0));
     const handles = await fetchProductHandles(ids);
 
     const data = checkouts.map((c) => ({
       id: c.id,
+      checkout_number: c.name || `#${c.id}`,
       created_at: c.created_at,
       email: c.email || c.customer?.email || null,
       phone:
@@ -42,6 +50,7 @@ export async function GET(req: Request) {
         c.billing_address?.phone ||
         null,
       city: c.shipping_address?.city || c.billing_address?.city || null,
+      address: fmtAddr(c.shipping_address) || fmtAddr(c.billing_address) || null,
       currency: c.currency,
       total_price: Number(c.total_price || 0),
       recovery_url: c.abandoned_checkout_url,

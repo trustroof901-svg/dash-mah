@@ -151,8 +151,19 @@ export function toOrderRow(o: ShopifyOrder) {
   };
 }
 
+interface ShopifyAddress {
+  phone?: string | null;
+  address1?: string | null;
+  address2?: string | null;
+  city?: string | null;
+  province?: string | null;
+  country?: string | null;
+  zip?: string | null;
+}
+
 export interface AbandonedCheckout {
   id: number;
+  name: string | null; // e.g. "#1234"
   created_at: string;
   email: string | null;
   phone: string | null;
@@ -165,8 +176,8 @@ export interface AbandonedCheckout {
     phone?: string | null;
     email?: string | null;
   } | null;
-  billing_address: { phone?: string | null; city?: string | null; province?: string | null } | null;
-  shipping_address: { phone?: string | null; city?: string | null; province?: string | null } | null;
+  billing_address: ShopifyAddress | null;
+  shipping_address: ShopifyAddress | null;
   line_items: {
     title: string;
     variant_title: string | null;
