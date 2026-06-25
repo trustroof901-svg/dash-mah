@@ -6,6 +6,17 @@ import { createBrowserClient } from "@/lib/supabase";
 import { useDash } from "@/components/DataProvider";
 import { Card, PageHeader, EmptyState, Badge } from "@/components/ui";
 import { fmtMoney, fmtNum } from "@/lib/format";
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  Bar,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from "recharts";
 
 interface AbItem {
   title: string;
@@ -64,7 +75,7 @@ const CALL_STATUSES = [
 ];
 
 interface Followup {
-  answers: Record<string, string>; // { q1, q2, q3 }
+  answers: Record<string, string[]>; // { q1: [...], q2: [...], q3: [...] } (multi-select)
   call_status: string;
   note: string;
 }
@@ -81,6 +92,11 @@ export default function AbandonedPage() {
   const [open, setOpen] = useState<Record<number, boolean>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
+  // filters / sort / graph
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortKey, setSortKey] = useState("date_desc");
+  const [showGraph, setShowGraph] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,9 +112,15 @@ export default function AbandonedPage() {
 
       const map: Record<string, Followup> = {};
       for (const f of fRes.data ?? []) {
-        // `reasons` jsonb now holds the survey answers object { q1, q2, q3 }.
-        const answers =
+        // `reasons` jsonb holds survey answers { q1:[...], q2:[...], q3:[...] }.
+        // Normalize older single-string answers into arrays.
+        const raw =
           f.reasons && !Array.isArray(f.reasons) && typeof f.reasons === "object" ? f.reasons : {};
+        const answers: Record<string, string[]> = {};
+        for (const k of Object.keys(raw)) {
+          const v = raw[k];
+          answers[k] = Array.isArray(v) ? v : v ? [String(v)] : [];
+        }
         map[f.checkout_id] = {
           answers,
           call_status: f.call_status ?? "not_called",
@@ -125,7 +147,7 @@ export default function AbandonedPage() {
     setSaved((s) => ({ ...s, [key]: false }));
   };
 
-  const setAnswer = (id: number, qKey: string, value: string) => {
+  const setAnswer = (id: number, qKey: string, value: string[]) => {
     update(id, { answers: { ...fu(id).answers, [qKey]: value } });
   };
 
@@ -163,6 +185,53 @@ export default function AbandonedPage() {
 
   const totalValue = checkouts.reduce((s, c) => s + c.total_price, 0);
   const pending = checkouts.filter((c) => (fu(c.id).call_status ?? "not_called") === "not_called").length;
+
+  // Apply search + status filter, then sort.
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const arr = checkouts.filter((c) => {
+      if (statusFilter !== "all" && (fu(c.id).call_status ?? "not_called") !== statusFilter) return false;
+      if (q) {
+        const hay = `${c.customer_name ?? ""} ${c.email ?? ""} ${c.phone ?? ""} ${c.checkout_number} ${c.city ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    arr.sort((a, b) => {
+      switch (sortKey) {
+        case "date_asc":
+          return a.created_at.localeCompare(b.created_at);
+        case "value_desc":
+          return b.total_price - a.total_price;
+        case "value_asc":
+          return a.total_price - b.total_price;
+        default:
+          return b.created_at.localeCompare(a.created_at); // date_desc
+      }
+    });
+    return arr;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkouts, search, statusFilter, sortKey, followups]);
+
+  // Graph: abandoned carts + value per day, and breakdown by call status.
+  const byDay = useMemo(() => {
+    const m = new Map<string, { date: string; count: number; value: number }>();
+    for (const c of visible) {
+      const d = (c.created_at || "").slice(0, 10);
+      const e = m.get(d) ?? { date: d, count: 0, value: 0 };
+      e.count += 1;
+      e.value += c.total_price;
+      m.set(d, e);
+    }
+    return [...m.values()]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((e) => ({ ...e, date: e.date.slice(5) }));
+  }, [visible]);
+
+  const byStatus = CALL_STATUSES.map((s) => ({
+    status: s.label,
+    count: visible.filter((c) => (fu(c.id).call_status ?? "not_called") === s.key).length,
+  }));
 
   return (
     <div>
@@ -217,12 +286,88 @@ export default function AbandonedPage() {
         </div>
       )}
 
-      <Card title={`${checkouts.length} Abandoned Checkouts`}>
-        {checkouts.length === 0 ? (
-          <EmptyState loading={loading} label="No abandoned carts right now." />
+      {/* Filters + sort + graph toggle */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="🔍 Search name / phone / email / checkout #"
+          className="min-w-[240px] flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+          title="Filter by call status"
+        >
+          <option value="all">All statuses</option>
+          {CALL_STATUSES.map((s) => (
+            <option key={s.key} value={s.key}>{s.label}</option>
+          ))}
+        </select>
+        <select
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value)}
+          className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+          title="Sort"
+        >
+          <option value="date_desc">Date: newest first</option>
+          <option value="date_asc">Date: oldest first</option>
+          <option value="value_desc">Value: high → low</option>
+          <option value="value_asc">Value: low → high</option>
+        </select>
+        <button
+          onClick={() => setShowGraph((g) => !g)}
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${showGraph ? "bg-indigo-600 text-white" : "border border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"}`}
+        >
+          📊 Graph
+        </button>
+      </div>
+
+      {showGraph && (
+        <div className="mb-6 grid gap-4 lg:grid-cols-3">
+          <Card className="lg:col-span-2" title="Abandoned Carts Over Time" subtitle="Count (bars) & value (line) per day">
+            {byDay.length ? (
+              <div className="h-72 w-full p-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={byDay} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                    <XAxis dataKey="date" fontSize={12} tickLine={false} />
+                    <YAxis yAxisId="l" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis yAxisId="r" orientation="right" fontSize={12} tickLine={false} axisLine={false} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar yAxisId="l" dataKey="count" name="Carts" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                    <Line yAxisId="r" type="monotone" dataKey="value" name="Value" stroke="#4f46e5" strokeWidth={2} dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <EmptyState loading={loading} label="No data for this filter." />
+            )}
+          </Card>
+          <Card title="By Call Status">
+            <div className="h-72 w-full p-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={byStatus} layout="vertical" margin={{ left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                  <XAxis type="number" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis type="category" dataKey="status" fontSize={11} width={90} tickLine={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" name="Carts" fill="#6366f1" radius={[0, 4, 4, 0]} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      <Card title={`${visible.length} of ${checkouts.length} Abandoned Checkouts`}>
+        {visible.length === 0 ? (
+          <EmptyState loading={loading} label="No carts match these filters." />
         ) : (
           <ul className="divide-y divide-gray-100">
-            {checkouts.map((c) => {
+            {visible.map((c) => {
               const isOpen = open[c.id];
               const f = fu(c.id);
               const status = CALL_STATUSES.find((s) => s.key === f.call_status);
@@ -297,16 +442,11 @@ export default function AbandonedPage() {
                           {QUESTIONS.map((q) => (
                             <div key={q.key}>
                               <label className="mb-1 block text-sm font-medium text-gray-700">{q.label}</label>
-                              <select
-                                value={f.answers[q.key] ?? ""}
-                                onChange={(e) => setAnswer(c.id, q.key, e.target.value)}
-                                className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                              >
-                                <option value="">— اختر —</option>
-                                {q.options.map((opt) => (
-                                  <option key={opt} value={opt}>{opt}</option>
-                                ))}
-                              </select>
+                              <MultiSelect
+                                options={q.options}
+                                value={f.answers[q.key] ?? []}
+                                onChange={(v) => setAnswer(c.id, q.key, v)}
+                              />
                             </div>
                           ))}
                         </div>
@@ -355,6 +495,59 @@ export default function AbandonedPage() {
           </ul>
         )}
       </Card>
+    </div>
+  );
+}
+
+/** Dropdown that opens a checkbox list — the agent can pick multiple options. */
+function MultiSelect({
+  options,
+  value,
+  onChange,
+}: {
+  options: string[];
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const toggle = (opt: string) =>
+    onChange(value.includes(opt) ? value.filter((x) => x !== opt) : [...value, opt]);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-2 rounded-lg border border-gray-300 px-3 py-1.5 text-right text-sm hover:bg-gray-50"
+      >
+        <span className={value.length ? "text-gray-800" : "text-gray-400"}>
+          {value.length ? value.join("، ") : "— اختر (يمكن اختيار أكثر من إجابة) —"}
+        </span>
+        <span className="text-gray-400">▾</span>
+      </button>
+
+      {open && (
+        <>
+          {/* click-away backdrop */}
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+            {options.map((opt) => (
+              <label
+                key={opt}
+                className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50"
+              >
+                <input
+                  type="checkbox"
+                  checked={value.includes(opt)}
+                  onChange={() => toggle(opt)}
+                  className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+                />
+                {opt}
+              </label>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
