@@ -63,7 +63,10 @@ const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
  * landing page") into a single set of totals by summing every data row.
  * Returns null if none of the four metric columns can be found.
  */
-export function aggregateTraffic(cells: string[][]): {
+export function aggregateTraffic(
+  cells: string[][],
+  opts?: { productHandles?: Set<string> }
+): {
   visitors: number;
   sessions: number;
   add_to_cart: number;
@@ -98,15 +101,26 @@ export function aggregateTraffic(cells: string[][]): {
 
   if (visitorsIdx < 0 && sessionsIdx < 0 && cartIdx < 0 && checkoutIdx < 0) return null;
 
-  // If this is a "by landing page" report, only count the NS Home page
-  // (/pages/ns-home-1 and its /en, /ar variants) — not every landing page.
+  // If this is a "by landing page" report, only count NS Home store traffic:
+  // the NS Home page/homepage, OR a product page that belongs to the
+  // "ns-home" collection (productHandles). Plain product pages NOT in the
+  // collection are excluded.
   const pathIdx = findCol(headers, (h) => h.includes("landingpagepath") || h.includes("path"));
   if (pathIdx >= 0) {
-    const NS_HOME = "pages/ns-home-1";
-    const filtered = dataRows.filter((c) =>
-      (c[pathIdx] || "").toLowerCase().includes(NS_HOME)
-    );
-    // only narrow if we actually matched the page (otherwise keep all rows)
+    const handles = opts?.productHandles;
+    const productHandle = (p: string) => {
+      const m = (p || "").toLowerCase().match(/\/products\/([^/?#]+)/);
+      return m ? m[1] : null;
+    };
+    const isStore = (p: string) => {
+      const x = (p || "").toLowerCase();
+      if (x.includes("ns-home")) return true; // the NS Home page (not the generic homepage)
+      const h = productHandle(x);
+      if (!h) return false;
+      // product page: include only if it's in the ns-home collection
+      return handles ? handles.has(h) : false;
+    };
+    const filtered = dataRows.filter((c) => isStore(c[pathIdx]));
     if (filtered.length > 0) dataRows = filtered;
   }
 

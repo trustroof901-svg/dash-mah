@@ -77,7 +77,8 @@ export default function OverviewPage() {
           value={fmtPct(conv)}
           accent="violet"
           icon="🎯"
-          formula={`${fmtNum(agg.orders_count)} orders ÷ ${fmtNum(agg.visitors)} unique NS Home visitors = ${fmtPct(conv)}`}
+          href="/traffic"
+          formula={`${fmtNum(agg.orders_count)} orders ÷ ${fmtNum(agg.visitors)} unique NS Home visitors = ${fmtPct(conv)}. Click to see visitors →`}
         />
       </div>
 

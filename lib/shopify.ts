@@ -117,6 +117,48 @@ export function channelOf(o: ShopifyOrder): "online" | "offline" {
   return o.source_name === "pos" ? "offline" : "online";
 }
 
+/** Find a collection id by its handle (checks custom + smart collections). */
+async function findCollectionId(handle: string): Promise<number | null> {
+  const { token, base } = shopifyConfig();
+  for (const type of ["custom_collections", "smart_collections"]) {
+    const res = await fetch(`${base}/${type}.json?handle=${encodeURIComponent(handle)}`, {
+      headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" },
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const data = (await res.json()) as Record<string, { id: number }[]>;
+      const arr = data[type];
+      if (arr && arr.length) return arr[0].id;
+    }
+  }
+  return null;
+}
+
+/**
+ * All product handles inside a collection (by handle), e.g. "ns-home".
+ * Used to count only NS-Home-collection product pages in analytics.
+ */
+export async function fetchCollectionProductHandles(collectionHandle: string): Promise<Set<string>> {
+  const { token, base } = shopifyConfig();
+  const handles = new Set<string>();
+  const id = await findCollectionId(collectionHandle);
+  if (!id) return handles;
+
+  let url: string | null = `${base}/products.json?collection_id=${id}&limit=250&fields=handle`;
+  while (url) {
+    const res = await fetch(url, {
+      headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) break;
+    const data = (await res.json()) as { products: { handle: string }[] };
+    for (const p of data.products) handles.add(p.handle.toLowerCase());
+    url = parseNextLink(res.headers.get("link"));
+    if (url) await new Promise((r) => setTimeout(r, 200));
+  }
+  return handles;
+}
+
 export interface ProductLookup {
   id: number;
   title: string;

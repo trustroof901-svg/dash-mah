@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { parseCsv, mapTrafficCsv, aggregateTraffic } from "@/lib/csv";
+import { fetchCollectionProductHandles } from "@/lib/shopify";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +67,14 @@ export async function POST(req: NextRequest) {
   // (e.g. a "by landing page" report), aggregate every row into a single
   // monthly total for the selected month.
   if (rows.length === 0) {
-    const agg = aggregateTraffic(cells);
+    // Product pages count only if they're in the "ns-home" collection.
+    let productHandles: Set<string> | undefined;
+    try {
+      productHandles = await fetchCollectionProductHandles("ns-home");
+    } catch {
+      productHandles = undefined;
+    }
+    const agg = aggregateTraffic(cells, { productHandles });
     if (agg) {
       if (!targetMonth || !/^\d{4}-\d{2}$/.test(targetMonth)) {
         return NextResponse.json(
