@@ -27,6 +27,8 @@ export default function ImportPage() {
   const [status, setStatus] = useState<{ tone: "ok" | "err" | "info"; msg: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [entry, setEntry] = useState<Entry>(emptyEntry());
+  // When a no-date report is uploaded, assign its totals to this day.
+  const [uploadDate, setUploadDate] = useState(toISODate(new Date()));
 
   const onFile = async (file: File) => {
     setBusy(true);
@@ -48,7 +50,7 @@ export default function ImportPage() {
       const res = await fetch("/api/traffic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cells, month }),
+        body: JSON.stringify({ cells, month, date: uploadDate }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -56,7 +58,13 @@ export default function ImportPage() {
         throw new Error((json.error || "Import failed") + found);
       }
 
-      if (json.mode === "monthly") {
+      if (json.mode === "daily-assigned") {
+        const t = json.totals;
+        setStatus({
+          tone: "ok",
+          msg: `Saved to ${json.date}: Visitors ${t.visitors}, Sessions ${t.sessions}, Cart ${t.add_to_cart}, Reached Checkout ${t.reached_checkout}. These numbers now appear on that day (and roll into the month).`,
+        });
+      } else if (json.mode === "monthly") {
         const t = json.totals;
         setStatus({
           tone: "ok",
@@ -191,8 +199,22 @@ export default function ImportPage() {
         </Card>
 
         {/* File upload */}
-        <Card title="Upload Report (Excel / CSV / XML)" subtitle={`Imports into ${month}`}>
+        <Card title="Upload Report (Excel / CSV / XML)" subtitle="Assign a date — a no-date report's totals are saved to that day">
           <div className="p-5">
+            <div className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+              <label className="mb-1 block text-xs font-semibold text-indigo-700">
+                📅 Assign uploaded numbers to this day
+              </label>
+              <input
+                type="date"
+                value={uploadDate}
+                onChange={(e) => setUploadDate(e.target.value)}
+                className="w-full rounded-lg border border-indigo-300 px-3 py-2 text-sm"
+              />
+              <p className="mt-1 text-[11px] text-indigo-600">
+                A “by landing page” report has no dates, so its NS-Home total is stored on the day you pick here.
+              </p>
+            </div>
             <div
               className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-center"
               onDragOver={(e) => e.preventDefault()}
@@ -224,9 +246,9 @@ export default function ImportPage() {
               />
             </div>
             <ul className="mt-3 space-y-1 text-xs text-gray-500">
-              <li>• <strong>By-day report</strong> (has a Day column) → fills each day.</li>
-              <li>• <strong>“By landing page” report</strong> (no dates) → summed into the <strong>Month Total</strong> for <strong>{month}</strong>. Set the Month above first.</li>
-              <li>• Export the report in Shopify for a single month to match.</li>
+              <li>• <strong>By-day report</strong> (has a Day column) → fills each day automatically (the date above is ignored).</li>
+              <li>• <strong>“By landing page” report</strong> (no dates) → its NS-Home total is saved to the <strong>day you pick above</strong>, so it shows in the daily columns and the month.</li>
+              <li>• Only products in the <strong>ns-home</strong> collection + the NS Home page are counted.</li>
             </ul>
           </div>
         </Card>

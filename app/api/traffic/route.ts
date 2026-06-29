@@ -14,11 +14,13 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   let cells: string[][] | null = null;
   let targetMonth: string | null = null;
+  let targetDate: string | null = null;
   const contentType = req.headers.get("content-type") || "";
   try {
     if (contentType.includes("application/json")) {
       const body = await req.json();
       if (typeof body.month === "string") targetMonth = body.month;
+      if (typeof body.date === "string") targetDate = body.date;
 
       // Manual entry: full typed rows — upsert directly (all 4 columns).
       if (Array.isArray(body.rows)) {
@@ -76,9 +78,39 @@ export async function POST(req: NextRequest) {
     }
     const agg = aggregateTraffic(cells, { productHandles });
     if (agg) {
+      // Preferred: the user assigned a specific DAY → store as that day's
+      // daily_traffic so it shows in the per-day columns and the month total.
+      if (targetDate && /^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+        const supabase = createServiceClient();
+        const { error } = await supabase.from("daily_traffic").upsert(
+          {
+            traffic_date: targetDate,
+            visitors: agg.visitors,
+            sessions: agg.sessions,
+            add_to_cart: agg.add_to_cart,
+            reached_checkout: agg.reached_checkout,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "traffic_date" }
+        );
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+        // Remove any month-total override so the daily values are what shows.
+        await supabase.from("monthly_traffic").delete().eq("month", targetDate.slice(0, 7));
+        return NextResponse.json({
+          ok: true,
+          mode: "daily-assigned",
+          date: targetDate,
+          totals: {
+            visitors: agg.visitors,
+            sessions: agg.sessions,
+            add_to_cart: agg.add_to_cart,
+            reached_checkout: agg.reached_checkout,
+          },
+        });
+      }
       if (!targetMonth || !/^\d{4}-\d{2}$/.test(targetMonth)) {
         return NextResponse.json(
-          { error: "This report has no dates — pick a Month first, then re-upload to store it as that month's total.", headers: agg.headers },
+          { error: "This report has no dates — pick a Day (or a Month) first, then re-upload.", headers: agg.headers },
           { status: 422 }
         );
       }
