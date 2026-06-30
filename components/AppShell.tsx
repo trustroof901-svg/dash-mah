@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useDash } from "./DataProvider";
 import { exportWorkbook } from "@/lib/exporter";
@@ -9,7 +9,14 @@ import { rangeForPreset, PRESET_LABELS, type RangePreset } from "@/lib/format";
 
 const INQUIRIES_URL = process.env.NEXT_PUBLIC_INQUIRIES_URL || "";
 
-const NAV: { href: string; label: string; icon: string; external?: boolean }[] = [
+type NavItem = { href: string; label: string; icon: string; external?: boolean };
+
+const INQUIRIES_ITEM: NavItem[] = INQUIRIES_URL
+  ? [{ href: INQUIRIES_URL, label: "Sample Inquiries", icon: "📨", external: true }]
+  : [];
+
+// Full nav for the normal (admin) dashboard.
+const NAV: NavItem[] = [
   { href: "/", label: "Overview", icon: "📊" },
   { href: "/daily", label: "Daily Report", icon: "📅" },
   { href: "/products", label: "Products", icon: "🛍️" },
@@ -17,19 +24,42 @@ const NAV: { href: string; label: string; icon: string; external?: boolean }[] =
   { href: "/order", label: "Create Order", icon: "🧾" },
   { href: "/compare", label: "Compare", icon: "⚖️" },
   { href: "/import", label: "Import Data", icon: "⬆️" },
-  // External "link out" tab to the Sample Inquiries dashboard.
-  ...(INQUIRIES_URL
-    ? [{ href: INQUIRIES_URL, label: "Sample Inquiries", icon: "📨", external: true }]
-    : []),
+  ...INQUIRIES_ITEM,
 ];
+
+// Restricted nav for the call-center login (only these tabs).
+const CC_NAV: NavItem[] = [
+  { href: "/abandoned", label: "Abandoned Carts", icon: "🛒" },
+  { href: "/order", label: "Create Order", icon: "🧾" },
+  ...INQUIRIES_ITEM,
+];
+// Routes a call-center user may open (anything else → /abandoned).
+const CC_ALLOWED = ["/abandoned", "/order"];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { month, range, setRange, rangeLabel, lastSync, loading, reload, metrics, agg, channels, bestSellers } =
     useDash();
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+
+  // Call-center restricted mode (set after logging in at /team). When on,
+  // only the limited nav shows and other routes redirect to /abandoned.
+  const [ccMode, setCcMode] = useState(false);
+  useEffect(() => {
+    setCcMode(typeof window !== "undefined" && localStorage.getItem("cc_mode") === "1");
+  }, [pathname]);
+  useEffect(() => {
+    if (ccMode && !CC_ALLOWED.includes(pathname)) router.replace("/abandoned");
+  }, [ccMode, pathname, router]);
+
+  const nav = ccMode ? CC_NAV : NAV;
+  const logoutCc = () => {
+    localStorage.removeItem("cc_mode");
+    window.location.href = "/team";
+  };
 
   const runSync = async (silent: boolean) => {
     if (!silent) setSyncing(true);
@@ -81,7 +111,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <nav className="space-y-1 p-3">
-          {NAV.map((item) => {
+          {nav.map((item) => {
             const active = pathname === item.href;
             const cls = `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
               active ? "bg-indigo-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
@@ -104,7 +134,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="absolute bottom-0 w-full border-t border-slate-800 p-4 text-[11px] text-slate-500">
-          {lastSync ? (
+          {ccMode ? (
+            <button onClick={logoutCc} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700">
+              Log out
+            </button>
+          ) : lastSync ? (
             <>Last Shopify sync:<br />{new Date(lastSync).toLocaleString()}</>
           ) : (
             "Not synced yet"
@@ -127,59 +161,65 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             ☰
           </button>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              onChange={(e) => {
-                const r = rangeForPreset(e.target.value as RangePreset);
-                setRange(r.start, r.end);
-              }}
-              defaultValue="this_month"
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
-              title="Quick ranges"
-            >
-              {(Object.keys(PRESET_LABELS) as RangePreset[]).map((k) => (
-                <option key={k} value={k}>{PRESET_LABELS[k]}</option>
-              ))}
-            </select>
-            <input
-              type="date"
-              value={range.start}
-              max={range.end}
-              onChange={(e) => setRange(e.target.value, range.end)}
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
-            />
-            <span className="text-gray-400">→</span>
-            <input
-              type="date"
-              value={range.end}
-              min={range.start}
-              onChange={(e) => setRange(range.start, e.target.value)}
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
-            />
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              onClick={() => runSync(false)}
-              disabled={syncing}
-              className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
-              title="Auto-syncs every 60s. Click to sync now."
-            >
-              {syncing ? "Syncing…" : "⟳ Sync Shopify"}
-            </button>
-            <button
-              onClick={reload}
-              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              {loading ? "Refreshing…" : "↻ Refresh"}
-            </button>
-            <button
-              onClick={doExport}
-              disabled={exporting || metrics.length === 0}
-              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {exporting ? "Exporting…" : "⬇ Export Excel"}
-            </button>
-          </div>
+          {ccMode ? (
+            <div className="font-semibold text-gray-700">Call Center</div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  onChange={(e) => {
+                    const r = rangeForPreset(e.target.value as RangePreset);
+                    setRange(r.start, r.end);
+                  }}
+                  defaultValue="this_month"
+                  className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
+                  title="Quick ranges"
+                >
+                  {(Object.keys(PRESET_LABELS) as RangePreset[]).map((k) => (
+                    <option key={k} value={k}>{PRESET_LABELS[k]}</option>
+                  ))}
+                </select>
+                <input
+                  type="date"
+                  value={range.start}
+                  max={range.end}
+                  onChange={(e) => setRange(e.target.value, range.end)}
+                  className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
+                />
+                <span className="text-gray-400">→</span>
+                <input
+                  type="date"
+                  value={range.end}
+                  min={range.start}
+                  onChange={(e) => setRange(range.start, e.target.value)}
+                  className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => runSync(false)}
+                  disabled={syncing}
+                  className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                  title="Auto-syncs every 60s. Click to sync now."
+                >
+                  {syncing ? "Syncing…" : "⟳ Sync Shopify"}
+                </button>
+                <button
+                  onClick={reload}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  {loading ? "Refreshing…" : "↻ Refresh"}
+                </button>
+                <button
+                  onClick={doExport}
+                  disabled={exporting || metrics.length === 0}
+                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {exporting ? "Exporting…" : "⬇ Export Excel"}
+                </button>
+              </div>
+            </>
+          )}
         </header>
 
         <main className="flex-1 px-4 py-6 lg:px-8">{children}</main>
