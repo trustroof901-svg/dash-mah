@@ -158,16 +158,22 @@ export default function OverviewPage() {
   );
 }
 
+interface Row {
+  count: number;
+  value: number;
+}
 interface Breakdown {
-  total: number;
-  web: number;
-  draft: number;
-  pos: number;
-  cancelled: number;
-  financial: Record<string, number>;
+  total: Row;
+  website: Row;
+  draftPaid: Row;
+  draftOther: Row;
+  pos: Row;
+  cancelled: Row;
+  onlineCounted: Row;
+  financial: Record<string, Row>;
 }
 
-/** Live Shopify order breakdown for the selected range (matches Shopify admin). */
+/** Live Shopify order breakdown for the selected range — detailed table. */
 function ShopifyBreakdown({ start, end }: { start: string; end: string }) {
   const [data, setData] = useState<Breakdown | null>(null);
   const [loading, setLoading] = useState(true);
@@ -191,15 +197,19 @@ function ShopifyBreakdown({ start, end }: { start: string; end: string }) {
     };
   }, [start, end]);
 
-  const Stat = ({ label, value, tone }: { label: string; value: number; tone?: string }) => (
-    <div className="rounded-lg border border-gray-200 bg-white p-3">
-      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
-      <div className={`mt-1 text-2xl font-bold ${tone ?? "text-gray-900"}`}>{fmtNum(value)}</div>
-    </div>
+  const TR = ({ label, row, tone, counted, note }: { label: string; row: Row; tone?: string; counted?: boolean; note?: string }) => (
+    <tr className={`border-t ${counted ? "bg-indigo-50/40" : ""}`}>
+      <td className={`px-4 py-2.5 ${tone ?? "text-gray-700"}`}>
+        {label}
+        {note && <span className="ml-2 text-xs text-gray-400">{note}</span>}
+      </td>
+      <td className="px-4 py-2.5 text-right font-medium">{fmtNum(row.count)}</td>
+      <td className="px-4 py-2.5 text-right font-medium">{fmtMoney(row.value)}</td>
+    </tr>
   );
 
   return (
-    <Card className="mb-6" title="Shopify Order Breakdown" subtitle="Live from Shopify for the selected range — every status">
+    <Card className="mb-6" title="Order Breakdown" subtitle="Live from Shopify for the selected range — counts & values">
       <div className="p-5">
         {loading ? (
           <EmptyState loading label="Loading from Shopify…" />
@@ -207,26 +217,55 @@ function ShopifyBreakdown({ start, end }: { start: string; end: string }) {
           <div className="text-sm text-rose-600">{err}</div>
         ) : data ? (
           <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-              <Stat label="All orders" value={data.total} />
-              <Stat label="Website" value={data.web} tone="text-emerald-600" />
-              <Stat label="Draft (call center)" value={data.draft} tone="text-gray-400" />
-              <Stat label="POS" value={data.pos} />
-              <Stat label="Cancelled" value={data.cancelled} tone="text-rose-600" />
-              <Stat label="Counted in dashboard" value={data.web} tone="text-indigo-600" />
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+                  <tr>
+                    <th className="px-4 py-2">Category</th>
+                    <th className="px-4 py-2 text-right">Orders</th>
+                    <th className="px-4 py-2 text-right">Value (gross)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <TR label="🌐 Website orders" row={data.website} tone="text-emerald-700" />
+                  <TR label="📞 Call-center drafts — paid" row={data.draftPaid} tone="text-emerald-700" note="counted" />
+                  <TR label="✅ Counted as Online (dashboard)" row={data.onlineCounted} tone="font-semibold text-indigo-700" counted />
+                  <TR label="🚫 Call-center drafts — pending/cancelled" row={data.draftOther} tone="text-gray-400" note="excluded" />
+                  <TR label="🏬 POS / retail (offline)" row={data.pos} tone="text-gray-400" note="excluded" />
+                  <TR label="❌ Cancelled (incl. above)" row={data.cancelled} tone="text-rose-600" />
+                  <TR label="📦 All Shopify orders (any source)" row={data.total} tone="font-semibold text-gray-900" />
+                </tbody>
+              </table>
             </div>
-            <div className="mt-4">
+
+            <div className="mt-5">
               <div className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">By payment status</div>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(data.financial).map(([k, v]) => (
-                  <span key={k} className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                    {k}: <strong>{fmtNum(v)}</strong>
-                  </span>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+                    <tr>
+                      <th className="px-4 py-2">Status</th>
+                      <th className="px-4 py-2 text-right">Orders</th>
+                      <th className="px-4 py-2 text-right">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(data.financial)
+                      .sort((a, b) => b[1].count - a[1].count)
+                      .map(([k, v]) => (
+                        <tr key={k} className="border-t">
+                          <td className="px-4 py-2 capitalize text-gray-700">{k.replace(/_/g, " ")}</td>
+                          <td className="px-4 py-2 text-right font-medium">{fmtNum(v.count)}</td>
+                          <td className="px-4 py-2 text-right font-medium">{fmtMoney(v.value)}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
               </div>
             </div>
+
             <p className="mt-3 text-xs text-gray-400">
-              The dashboard counts <strong>website</strong> orders (drafts excluded). “All orders” includes drafts, POS and cancelled, like Shopify’s headline.
+              The dashboard’s “online” = <strong>website + paid call-center orders</strong> (the highlighted row). Pending/cancelled drafts and POS are excluded. “Value” is gross (before refunds).
             </p>
           </>
         ) : null}
