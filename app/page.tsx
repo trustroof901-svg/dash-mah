@@ -53,6 +53,13 @@ export default function OverviewPage() {
           formula={`Before refund ${fmtMoney(salesBefore)} − refunds ${fmtMoney(refunds)} = ${fmtMoney(salesAfter)}`}
         />
         <MetricCard
+          label="COD / Not Paid Yet"
+          value={fmtMoney(agg.unpaid_sales)}
+          accent="amber"
+          icon="💵"
+          formula={`${fmtNum(agg.unpaid_orders)} unpaid orders (COD / pending). Already included in Total Sales.`}
+        />
+        <MetricCard
           label="Number of Orders"
           value={fmtNum(agg.orders_count)}
           accent="indigo"

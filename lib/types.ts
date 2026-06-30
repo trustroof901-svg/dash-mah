@@ -15,6 +15,8 @@ export interface DailyMetric {
   items_sold: number;
   conversion_rate: number; // fraction (0..1)
   abandoned_rate: number; // fraction (0..1)
+  unpaid_orders: number; // COD / pending (not paid yet)
+  unpaid_sales: number; // value of those unpaid orders
 }
 
 /** One row per (day, channel) from `daily_orders_by_channel`. */

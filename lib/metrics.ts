@@ -25,6 +25,8 @@ export interface Aggregate {
   total_refunds: number;
   orders_fulfilled: number;
   items_sold: number;
+  unpaid_orders: number;
+  unpaid_sales: number;
 }
 
 /** Ordered exactly like the Google Sheet's top table. */
@@ -76,6 +78,8 @@ export function computeAggregate(metrics: DailyMetric[]): Aggregate {
     total_refunds: sum((m) => m.total_refunds),
     orders_fulfilled: sum((m) => m.orders_fulfilled),
     items_sold: sum((m) => m.items_sold),
+    unpaid_orders: sum((m) => m.unpaid_orders),
+    unpaid_sales: sum((m) => m.unpaid_sales),
   };
 }
 
@@ -102,5 +106,7 @@ export function zeroMetric(day: string): DailyMetric {
     items_sold: 0,
     conversion_rate: 0,
     abandoned_rate: 0,
+    unpaid_orders: 0,
+    unpaid_sales: 0,
   };
 }
