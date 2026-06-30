@@ -6,10 +6,10 @@ import { Card, EmptyState, PageHeader, Badge, MetricCard } from "@/components/ui
 import { SalesTrend, ChannelDonut, FunnelBars } from "@/components/charts";
 import { fmtMoney, fmtNum, fmtPct } from "@/lib/format";
 import { buildInsights } from "@/lib/insights";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export default function OverviewPage() {
-  const { rangeLabel, metrics, agg, channels, bestSellers, abandonedCount, loading, error } = useDash();
+  const { rangeLabel, range, metrics, agg, channels, bestSellers, abandonedCount, loading, error } = useDash();
 
   const online = channels.filter((c) => c.channel === "online").reduce((s, c) => s + Number(c.sales), 0);
   const offline = channels.filter((c) => c.channel === "offline").reduce((s, c) => s + Number(c.sales), 0);
@@ -57,7 +57,7 @@ export default function OverviewPage() {
           value={fmtNum(agg.orders_count)}
           accent="indigo"
           icon="🧾"
-          formula="Paid online orders, excluding cancelled"
+          formula="All website orders (incl. cancelled & refunded); draft orders excluded"
         />
         <MetricCard
           label="Total Checkout"
@@ -83,6 +83,8 @@ export default function OverviewPage() {
           formula={`${fmtNum(abandonedCount)} abandoned ÷ ${fmtNum(totalCheckouts)} checkouts = ${fmtPct(abandoned)}`}
         />
       </div>
+
+      <ShopifyBreakdown start={range.start} end={range.end} />
 
       {/* Trend + channel split */}
       <div className="mb-6 grid gap-4 lg:grid-cols-3">
@@ -146,6 +148,83 @@ export default function OverviewPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+interface Breakdown {
+  total: number;
+  web: number;
+  draft: number;
+  pos: number;
+  cancelled: number;
+  financial: Record<string, number>;
+}
+
+/** Live Shopify order breakdown for the selected range (matches Shopify admin). */
+function ShopifyBreakdown({ start, end }: { start: string; end: string }) {
+  const [data, setData] = useState<Breakdown | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setErr(null);
+    fetch(`/api/order-breakdown?start=${start}&end=${end}`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (!alive) return;
+        if (j.ok) setData(j);
+        else setErr(j.error || "Failed to load");
+      })
+      .catch((e) => alive && setErr(String(e)))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [start, end]);
+
+  const Stat = ({ label, value, tone }: { label: string; value: number; tone?: string }) => (
+    <div className="rounded-lg border border-gray-200 bg-white p-3">
+      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
+      <div className={`mt-1 text-2xl font-bold ${tone ?? "text-gray-900"}`}>{fmtNum(value)}</div>
+    </div>
+  );
+
+  return (
+    <Card className="mb-6" title="Shopify Order Breakdown" subtitle="Live from Shopify for the selected range — every status">
+      <div className="p-5">
+        {loading ? (
+          <EmptyState loading label="Loading from Shopify…" />
+        ) : err ? (
+          <div className="text-sm text-rose-600">{err}</div>
+        ) : data ? (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <Stat label="All orders" value={data.total} />
+              <Stat label="Website" value={data.web} tone="text-emerald-600" />
+              <Stat label="Draft (call center)" value={data.draft} tone="text-gray-400" />
+              <Stat label="POS" value={data.pos} />
+              <Stat label="Cancelled" value={data.cancelled} tone="text-rose-600" />
+              <Stat label="Counted in dashboard" value={data.web} tone="text-indigo-600" />
+            </div>
+            <div className="mt-4">
+              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">By payment status</div>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(data.financial).map(([k, v]) => (
+                  <span key={k} className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                    {k}: <strong>{fmtNum(v)}</strong>
+                  </span>
+                ))}
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-gray-400">
+              The dashboard counts <strong>website</strong> orders (drafts excluded). “All orders” includes drafts, POS and cancelled, like Shopify’s headline.
+            </p>
+          </>
+        ) : null}
+      </div>
+    </Card>
   );
 }
 
