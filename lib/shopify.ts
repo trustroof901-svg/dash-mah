@@ -105,30 +105,16 @@ export async function fetchOrders(opts: {
     if (url) await new Promise((r) => setTimeout(r, 300));
   }
 
-  if (onlyWeb) {
-    // website orders + call-center (draft) orders; excludes POS/retail.
-    return all.filter((o) => {
-      const s = o.source_name ?? "web";
-      return s === "web" || s === "shopify_draft_order";
-    });
-  }
+  void onlyWeb; // we now keep ALL orders; channelOf sorts POS → offline.
   return all;
 }
 
 /**
- * Classify an order's channel:
- *  - POS / retail            → "offline"
- *  - draft (call-center):
- *      paid & not cancelled  → "online"  (a real recovered sale, counted)
- *      otherwise             → "draft"   (pending/cancelled — NOT counted)
- *  - everything else (web)   → "online"
+ * Classify an order's channel. Everything counts as "online" (website +
+ * call-center draft orders, any status) except POS/retail which is "offline".
  */
-export function channelOf(o: ShopifyOrder): "online" | "offline" | "draft" {
-  if (o.source_name === "pos") return "offline";
-  if (o.source_name === "shopify_draft_order") {
-    return o.financial_status === "paid" && !o.cancelled_at ? "online" : "draft";
-  }
-  return "online";
+export function channelOf(o: ShopifyOrder): "online" | "offline" {
+  return o.source_name === "pos" ? "offline" : "online";
 }
 
 /** Find a collection id by its handle (checks custom + smart collections). */

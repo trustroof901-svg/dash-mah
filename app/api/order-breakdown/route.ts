@@ -73,10 +73,10 @@ export async function GET(req: NextRequest) {
       } else add(website, v);
     }
 
-    // What the dashboard counts as "online" = website + paid drafts.
+    // Dashboard counts ALL non-POS orders as "online" = website + all drafts.
     const onlineCounted: Row = {
-      count: website.count + draftPaid.count,
-      value: website.value + draftPaid.value,
+      count: website.count + draftPaid.count + draftOther.count,
+      value: website.value + draftPaid.value + draftOther.value,
     };
 
     return NextResponse.json({

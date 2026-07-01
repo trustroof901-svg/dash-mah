@@ -64,7 +64,7 @@ export default function OverviewPage() {
           value={fmtNum(agg.orders_count)}
           accent="indigo"
           icon="🧾"
-          formula="All website orders (incl. cancelled & refunded); draft orders excluded"
+          formula="All orders — website + call-center, incl. cancelled/refunded/COD; only POS excluded"
         />
         <MetricCard
           label="Total Checkout"
@@ -229,8 +229,8 @@ function ShopifyBreakdown({ start, end }: { start: string; end: string }) {
                 <tbody>
                   <TR label="🌐 Website orders" row={data.website} tone="text-emerald-700" />
                   <TR label="📞 Call-center drafts — paid" row={data.draftPaid} tone="text-emerald-700" note="counted" />
+                  <TR label="📞 Call-center drafts — pending/cancelled" row={data.draftOther} tone="text-gray-600" note="counted" />
                   <TR label="✅ Counted as Online (dashboard)" row={data.onlineCounted} tone="font-semibold text-indigo-700" counted />
-                  <TR label="🚫 Call-center drafts — pending/cancelled" row={data.draftOther} tone="text-gray-400" note="excluded" />
                   <TR label="🏬 POS / retail (offline)" row={data.pos} tone="text-gray-400" note="excluded" />
                   <TR label="❌ Cancelled (incl. above)" row={data.cancelled} tone="text-rose-600" />
                   <TR label="📦 All Shopify orders (any source)" row={data.total} tone="font-semibold text-gray-900" />
@@ -265,7 +265,7 @@ function ShopifyBreakdown({ start, end }: { start: string; end: string }) {
             </div>
 
             <p className="mt-3 text-xs text-gray-400">
-              The dashboard’s “online” = <strong>website + paid call-center orders</strong> (the highlighted row). Pending/cancelled drafts and POS are excluded. “Value” is gross (before refunds).
+              The dashboard’s “online” = <strong>website + all call-center orders</strong> (the highlighted row). Only POS/retail is excluded (offline). “Value” is gross (before refunds). Note: Shopify’s Sales report is accrual (returns on the refund day), so its monthly total can still differ slightly.
             </p>
           </>
         ) : null}
