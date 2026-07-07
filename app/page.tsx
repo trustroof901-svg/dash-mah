@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useDash } from "@/components/DataProvider";
 import { Card, EmptyState, PageHeader, Badge, MetricCard } from "@/components/ui";
-import { SalesTrend, ChannelDonut, FunnelBars } from "@/components/charts";
+import { SalesTrend, SalesOrdersLabeled, ChannelDonut, FunnelBars } from "@/components/charts";
 import { fmtMoney, fmtNum, fmtPct } from "@/lib/format";
 import { buildInsights } from "@/lib/insights";
 import { useEffect, useMemo, useState } from "react";
@@ -106,6 +106,11 @@ export default function OverviewPage() {
           )}
         </Card>
       </div>
+
+      {/* Daily sales & orders with the number on each day, for the from→to range */}
+      <Card className="mb-6" title="Daily Sales & Orders — with numbers" subtitle={`Each day in ${rangeLabel}`}>
+        {metrics.length ? <SalesOrdersLabeled data={metrics} /> : <EmptyState loading={loading} />}
+      </Card>
 
       {/* Insights + funnel + best sellers */}
       <div className="grid gap-4 lg:grid-cols-3">

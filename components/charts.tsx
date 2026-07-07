@@ -12,6 +12,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  LabelList,
   PieChart,
   Pie,
   Cell,
@@ -84,6 +85,38 @@ export function TrafficTrend({ data }: { data: DailyMetric[] }) {
 }
 
 /** Conversion-rate line over time (%). */
+/** Daily sales (bars) + orders (line) with the number printed on each day. */
+export function SalesOrdersLabeled({ data }: { data: DailyMetric[] }) {
+  const d = data.map((m) => ({
+    date: mmdd(m.day),
+    sales: Number(m.total_sales),
+    orders: Number(m.orders_count),
+  }));
+  return (
+    <div className="h-80 w-full px-2 pb-2">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={d} margin={{ top: 26, right: 16, bottom: 0, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+          <XAxis dataKey="date" fontSize={11} tickLine={false} axisLine={false} />
+          <YAxis yAxisId="l" fontSize={11} tickLine={false} axisLine={false} width={48} />
+          <YAxis yAxisId="r" orientation="right" fontSize={11} tickLine={false} axisLine={false} width={32} />
+          <Tooltip
+            formatter={(v: number, n) => (n === "Sales" ? fmtMoney(v) : fmtNum(v))}
+            contentStyle={{ borderRadius: 12, border: "1px solid #e5e7eb", fontSize: 12 }}
+          />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Bar yAxisId="l" dataKey="sales" name="Sales" fill="#6366f1" radius={[4, 4, 0, 0]}>
+            <LabelList dataKey="sales" position="top" fontSize={10} fill="#4338ca" formatter={(v: number) => (v ? fmtNum(v) : "")} />
+          </Bar>
+          <Line yAxisId="r" type="monotone" dataKey="orders" name="Orders" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }}>
+            <LabelList dataKey="orders" position="bottom" fontSize={10} fill="#b45309" formatter={(v: number) => (v ? String(v) : "")} />
+          </Line>
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 /** Daily unique visitors & sessions (bars) + visitors-per-session (line). */
 export function VisitorsPerSession({ data }: { data: DailyMetric[] }) {
   const d = data.map((m) => {
