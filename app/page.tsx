@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useDash } from "@/components/DataProvider";
 import { Card, EmptyState, PageHeader, Badge, MetricCard } from "@/components/ui";
-import { SalesTrend, SalesOrdersLabeled, ChannelDonut, FunnelBars } from "@/components/charts";
+import { VisitorsPerSession, ChannelDonut, FunnelBars } from "@/components/charts";
 import { fmtMoney, fmtNum, fmtPct } from "@/lib/format";
 import { buildInsights } from "@/lib/insights";
 import { useEffect, useMemo, useState } from "react";
@@ -93,10 +93,17 @@ export default function OverviewPage() {
 
       <ShopifyBreakdown start={range.start} end={range.end} />
 
-      {/* Trend + channel split */}
+      {/* Sessions per unique visitor + channel split */}
       <div className="mb-6 grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2" title="Sales & Orders Trend">
-          {metrics.length ? <SalesTrend data={metrics} /> : <EmptyState loading={loading} />}
+        <Card className="lg:col-span-2" title="Sessions per Unique Visitor (daily)" subtitle={`Bars: visitors & sessions · Line: sessions ÷ unique visitor — ${rangeLabel}`}>
+          {metrics.some((m) => Number(m.visitors) > 0 || Number(m.sessions) > 0) ? (
+            <VisitorsPerSession data={metrics} />
+          ) : (
+            <EmptyState
+              loading={loading}
+              label="No per-day visitors yet. Import a by-day traffic report, or assign an upload to a date on the Import page."
+            />
+          )}
         </Card>
         <Card title="Online vs Offline" subtitle="Offline arrives in Phase 2 (Odoo)">
           {agg.total_sales > 0 ? (
@@ -106,11 +113,6 @@ export default function OverviewPage() {
           )}
         </Card>
       </div>
-
-      {/* Daily sales & orders with the number on each day, for the from→to range */}
-      <Card className="mb-6" title="Daily Sales & Orders — with numbers" subtitle={`Each day in ${rangeLabel}`}>
-        {metrics.length ? <SalesOrdersLabeled data={metrics} /> : <EmptyState loading={loading} />}
-      </Card>
 
       {/* Insights + funnel + best sellers */}
       <div className="grid gap-4 lg:grid-cols-3">
