@@ -44,6 +44,8 @@ interface DashState {
   monthlyTraffic: MonthlyTraffic | null;
   abandonedCount: number; // real Shopify abandoned checkouts in the month
   abandonedValue: number;
+  offlineAmount: number; // Odoo استهلاكي sales in range
+  offlineInvoices: number;
   agg: Aggregate;
   days: string[];
   lastSync: string | null;
@@ -79,6 +81,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [monthlyTraffic, setMonthlyTraffic] = useState<MonthlyTraffic | null>(null);
   const [abandonedCount, setAbandonedCount] = useState(0);
   const [abandonedValue, setAbandonedValue] = useState(0);
+  const [offlineAmount, setOfflineAmount] = useState(0);
+  const [offlineInvoices, setOfflineInvoices] = useState(0);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +93,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const [mRes, cRes, bRes, tRes, mtRes, sRes] = await Promise.all([
+      const [mRes, cRes, bRes, tRes, mtRes, sRes, oRes] = await Promise.all([
         supabase.from("daily_metrics").select("*").gte("day", start).lte("day", end).order("day"),
         supabase
           .from("daily_orders_by_channel")
@@ -104,6 +108,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           .lte("traffic_date", end),
         supabase.from("monthly_traffic").select("*").eq("month", month).maybeSingle(),
         supabase.from("sync_state").select("last_run_at").eq("id", "orders").single(),
+        supabase.from("offline_sales").select("amount,invoices").gte("day", start).lte("day", end),
       ]);
       if (mRes.error) throw mRes.error;
       if (cRes.error) throw cRes.error;
@@ -115,6 +120,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setTraffic((tRes.data as TrafficRow[]) ?? []);
       setMonthlyTraffic((mtRes.data as MonthlyTraffic) ?? null);
       setLastSync(sRes.data?.last_run_at ?? null);
+      const off = (oRes.data as { amount: number; invoices: number }[]) ?? [];
+      setOfflineAmount(off.reduce((s, r) => s + Number(r.amount || 0), 0));
+      setOfflineInvoices(off.reduce((s, r) => s + Number(r.invoices || 0), 0));
 
       // Real abandoned checkouts from Shopify, filtered to the selected month.
       try {
@@ -173,6 +181,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     monthlyTraffic,
     abandonedCount,
     abandonedValue,
+    offlineAmount,
+    offlineInvoices,
     agg,
     days,
     lastSync,

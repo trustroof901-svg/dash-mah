@@ -9,10 +9,10 @@ import { buildInsights } from "@/lib/insights";
 import { useEffect, useMemo, useState } from "react";
 
 export default function OverviewPage() {
-  const { rangeLabel, range, metrics, agg, channels, bestSellers, abandonedCount, loading, error } = useDash();
+  const { rangeLabel, range, metrics, agg, bestSellers, abandonedCount, offlineAmount, offlineInvoices, loading, error } = useDash();
 
-  const online = channels.filter((c) => c.channel === "online").reduce((s, c) => s + Number(c.sales), 0);
-  const offline = channels.filter((c) => c.channel === "offline").reduce((s, c) => s + Number(c.sales), 0);
+  const online = agg.total_sales; // Shopify online (website + call-center)
+  const offline = offlineAmount; // Odoo استهلاكي (offline) sales
   // Sales before vs after refunds.
   const salesAfter = Number(agg.total_sales) || 0; // net (after refunds)
   const refunds = Number(agg.total_refunds) || 0;
@@ -105,8 +105,11 @@ export default function OverviewPage() {
             />
           )}
         </Card>
-        <Card title="Online vs Offline" subtitle="Offline arrives in Phase 2 (Odoo)">
-          {agg.total_sales > 0 ? (
+        <Card
+          title="Online vs Offline"
+          subtitle={`Offline (استهلاكي / Odoo): ${fmtNum(offlineInvoices)} invoices · ${fmtMoney(offline)}`}
+        >
+          {online > 0 || offline > 0 ? (
             <ChannelDonut online={online} offline={offline} />
           ) : (
             <EmptyState loading={loading} />
