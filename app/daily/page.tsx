@@ -13,20 +13,20 @@ const sourceColor: Record<string, string> = {
 };
 
 export default function DailyPage() {
-  const { metrics, agg, channels, days, loading } = useDash();
+  const { metrics, agg, channels, days, offlineDaily, loading } = useDash();
   const [splitDate, setSplitDate] = useState<string>("");
 
   const activeSplit = splitDate || days[days.length - 1] || "";
   const split = useMemo(() => {
     const forDate = channels.filter((c) => c.order_date === activeSplit);
-    const g = (ch: "online" | "offline") => {
-      const r = forDate.find((c) => c.channel === ch);
-      return { sales: Number(r?.sales ?? 0), orders: Number(r?.orders ?? 0) };
-    };
-    const on = g("online");
-    const off = g("offline");
+    const onRow = forDate.find((c) => c.channel === "online");
+    const on = { sales: Number(onRow?.sales ?? 0), orders: Number(onRow?.orders ?? 0) };
+    // Offline comes from Odoo (offline_sales), not Shopify POS. "orders" here
+    // is the invoice count for that day.
+    const offRow = offlineDaily.find((r) => r.day === activeSplit);
+    const off = { sales: Number(offRow?.amount ?? 0), orders: Number(offRow?.invoices ?? 0) };
     return { on, off, total: { sales: on.sales + off.sales, orders: on.orders + off.orders } };
-  }, [channels, activeSplit]);
+  }, [channels, offlineDaily, activeSplit]);
 
   return (
     <div>
