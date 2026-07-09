@@ -60,6 +60,13 @@ export default function OverviewPage() {
           formula={`${fmtNum(agg.unpaid_orders)} unpaid orders (COD / pending). Already included in Total Sales.`}
         />
         <MetricCard
+          label="Offline Sales (Odoo)"
+          value={fmtMoney(offline)}
+          accent="violet"
+          icon="🏬"
+          formula={`${fmtNum(offlineInvoices)} استهلاكي invoices in ${rangeLabel} — synced from Odoo. Separate from online Total Sales.`}
+        />
+        <MetricCard
           label="Number of Orders"
           value={fmtNum(agg.orders_count)}
           accent="indigo"
