@@ -18,6 +18,7 @@ const INQUIRIES_ITEM: NavItem[] = INQUIRIES_URL
 // Full nav for the normal (admin) dashboard.
 const NAV: NavItem[] = [
   { href: "/", label: "Overview", icon: "📊" },
+  { href: "/summary", label: "Summary", icon: "📋" },
   { href: "/daily", label: "Daily Report", icon: "📅" },
   { href: "/offline", label: "Offline (Odoo)", icon: "🏬" },
   { href: "/products", label: "Products", icon: "🛍️" },
@@ -199,6 +200,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-2">
               <span className="font-semibold text-gray-700">Call Center</span>
               {ccEmail && <span className="text-sm text-gray-400">· {ccEmail}</span>}
+            </div>
+          ) : pathname === "/summary" ? (
+            // Summary has its own day/range filter — hide the global toolbar.
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-gray-700">Summary</span>
             </div>
           ) : (
             <>
