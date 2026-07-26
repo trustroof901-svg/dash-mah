@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchOdooInvoices, odooConfig } from "@/lib/odoo";
+import { fetchOdooInvoices, odooConfig, isRefund } from "@/lib/odoo";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -19,6 +19,7 @@ interface OfflineInvoice {
   salesperson: string;
   amount: number;
   items: number;
+  refund: boolean;
   lines: OfflineLine[];
 }
 
@@ -50,6 +51,8 @@ export async function GET(req: NextRequest) {
       if (skip.size && skip.has((r.branch ?? "").toLowerCase())) continue;
       const key = r.invoice_number;
       if (!key) continue;
+      const refund = isRefund(key);
+      const sign = refund ? -1 : 1;
       let inv = map.get(key);
       if (!inv) {
         inv = {
@@ -60,17 +63,18 @@ export async function GET(req: NextRequest) {
           salesperson: r.salesperson ?? "",
           amount: 0,
           items: 0,
+          refund,
           lines: [],
         };
         map.set(key, inv);
       }
-      inv.amount += Number(r.price_total || 0);
-      inv.items += Number(r.qty || 0);
+      inv.amount += Number(r.price_total || 0) * sign;
+      inv.items += Number(r.qty || 0) * sign;
       inv.lines.push({
         product_name: r.product_name ?? "",
         attribute_name: r.attribute_name ?? "",
-        qty: Number(r.qty || 0),
-        price_total: Number(r.price_total || 0),
+        qty: Number(r.qty || 0) * sign,
+        price_total: Number(r.price_total || 0) * sign,
         category: r.product_category ?? "",
       });
     }

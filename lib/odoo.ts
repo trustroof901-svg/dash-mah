@@ -76,6 +76,20 @@ export async function fetchOdooInvoices(dateFrom: string, dateTo: string): Promi
   return all;
 }
 
+/**
+ * Refund / credit-note invoices use an "R" prefix in Odoo (e.g. RMAADI/…,
+ * RAS-SL/…) while sales invoices are MAADI/…, AS-SL/…, SHPFY/…. The API sends
+ * their price_total as POSITIVE, so we flip the sign to subtract refunds.
+ */
+export function isRefund(invoiceNumber: string): boolean {
+  return /^r/i.test((invoiceNumber ?? "").trim());
+}
+/** price_total signed negative for refunds. */
+export function signedTotal(row: { invoice_number: string; price_total: number }): number {
+  const v = Number(row.price_total || 0);
+  return isRefund(row.invoice_number) ? -Math.abs(v) : v;
+}
+
 export interface OfflineDay {
   day: string;
   invoices: number;
@@ -103,9 +117,12 @@ export function aggregateOffline(
     const day = (r.invoice_date ?? "").slice(0, 10);
     if (!day) continue;
     const e = byDay.get(day) ?? { amount: 0, items: 0, invoices: new Set<string>() };
-    e.amount += Number(r.price_total || 0);
-    e.items += Number(r.qty || 0);
-    if (r.invoice_number) e.invoices.add(r.invoice_number);
+    const refund = isRefund(r.invoice_number);
+    const sign = refund ? -1 : 1;
+    e.amount += Number(r.price_total || 0) * sign;
+    e.items += Number(r.qty || 0) * sign;
+    // Count sales invoices only; refunds subtract from amount but aren't "orders".
+    if (r.invoice_number && !refund) e.invoices.add(r.invoice_number);
     byDay.set(day, e);
   }
   return [...byDay.entries()]

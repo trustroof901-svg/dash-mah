@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchOdooInvoices, odooConfig } from "@/lib/odoo";
+import { fetchOdooInvoices, odooConfig, isRefund } from "@/lib/odoo";
 import { createServiceClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -75,13 +75,14 @@ export async function GET(req: NextRequest) {
     const periodAgg = (pf: string, pt: string) => {
       const res: Record<string, { orders: Set<string>; value: number }> = {};
       for (const label of branchLabels) res[label] = { orders: new Set(), value: 0 };
-      // Branches from Odoo
+      // Branches from Odoo — refunds (R-prefix) subtract and aren't counted as orders.
       for (const r of est) {
         const d = (r.invoice_date ?? "").slice(0, 10);
         if (d < pf || d > pt) continue;
         const label = branchLabel(r.branch ?? "");
-        res[label].orders.add(r.invoice_number);
-        res[label].value += Number(r.price_total || 0);
+        const refund = isRefund(r.invoice_number);
+        res[label].value += Number(r.price_total || 0) * (refund ? -1 : 1);
+        if (!refund) res[label].orders.add(r.invoice_number);
       }
       // Online from Shopify daily_metrics
       let webOrders = 0;

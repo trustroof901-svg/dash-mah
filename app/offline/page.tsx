@@ -20,6 +20,7 @@ interface OfflineInvoice {
   salesperson: string;
   amount: number;
   items: number;
+  refund?: boolean;
   lines: OfflineLine[];
 }
 
@@ -155,6 +156,7 @@ function FragmentRow({
         <td className="px-4 py-3 font-medium">
           <span className="mr-1.5 inline-block text-gray-400">{isOpen ? "▾" : "▸"}</span>
           {inv.invoice_number}
+          {inv.refund && <Badge color="rose">refund</Badge>}
         </td>
         <td className="px-4 py-3 text-gray-600">{inv.invoice_date}</td>
         <td className="px-4 py-3">{inv.customer_name}</td>
@@ -162,7 +164,7 @@ function FragmentRow({
           <Badge color={inv.branch.toLowerCase() === "shopify" ? "sky" : "violet"}>{inv.branch}</Badge>
         </td>
         <td className="px-4 py-3 text-right">{fmtNum(inv.items)}</td>
-        <td className="px-4 py-3 text-right font-semibold">{fmtMoney(inv.amount)}</td>
+        <td className={`px-4 py-3 text-right font-semibold ${inv.amount < 0 ? "text-rose-600" : ""}`}>{fmtMoney(inv.amount)}</td>
       </tr>
       {isOpen && (
         <tr className="bg-gray-50/60">

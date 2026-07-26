@@ -124,8 +124,8 @@ export default function SummaryPage() {
               <HeaderRow label="Location" cols={cols} render={(c) => (c === "Total" ? String(data.channels.length) : c)} />
               <DataRow label={`Orders (${periodLabel})`} cols={cols} block={data.period} kind="orders" />
               <DataRow label={`Value (${periodLabel})`} cols={cols} block={data.period} kind="value" />
-              <DataRow label="MTD Orders" cols={cols} block={data.mtd} kind="orders" highlight />
-              <DataRow label="MTD Value" cols={cols} block={data.mtd} kind="value" highlight />
+              <DataRow label="MTD Orders" cols={cols} block={data.mtd} kind="orders" compareBlock={data.lastMonth} />
+              <DataRow label="MTD Value" cols={cols} block={data.mtd} kind="value" compareBlock={data.lastMonth} />
               <DataRow label="Orders Last Month" cols={cols} block={data.lastMonth} kind="orders" />
               <DataRow label="Amount Last Month" cols={cols} block={data.lastMonth} kind="value" />
             </tbody>
@@ -157,12 +157,14 @@ function DataRow({
   block,
   kind,
   highlight,
+  compareBlock,
 }: {
   label: string;
   cols: string[];
   block: Block;
   kind: "orders" | "value";
   highlight?: boolean;
+  compareBlock?: Block; // when set: green if cell > compare, red if less (vs last month)
 }) {
   return (
     <tr>
@@ -171,13 +173,19 @@ function DataRow({
         const cell = block[c];
         const v = cell ? (kind === "orders" ? cell.orders : cell.value) : 0;
         const isTotal = c === "Total";
+        let cls = "";
+        if (compareBlock) {
+          const cc = compareBlock[c];
+          const cv = cc ? (kind === "orders" ? cc.orders : cc.value) : 0;
+          if (v > cv) cls = isTotal ? "bg-emerald-500 font-bold text-white" : "bg-emerald-50 font-semibold text-emerald-700";
+          else if (v < cv) cls = isTotal ? "bg-rose-500 font-bold text-white" : "bg-rose-50 font-semibold text-rose-700";
+          else cls = isTotal ? "bg-gray-100 font-bold" : "";
+        } else {
+          cls = isTotal ? (highlight ? "bg-emerald-500 font-bold text-white" : "bg-gray-100 font-bold") : "";
+          if (v < 0 && !(isTotal && highlight)) cls += " text-rose-600";
+        }
         return (
-          <td
-            key={c}
-            className={`border border-gray-200 px-4 py-2.5 font-medium ${
-              isTotal ? (highlight ? "bg-emerald-500 font-bold text-white" : "bg-gray-100 font-bold") : ""
-            }`}
-          >
+          <td key={c} className={`border border-gray-200 px-4 py-2.5 font-medium ${cls}`}>
             {kind === "orders" ? fmtNum(v) : money(v)}
           </td>
         );
