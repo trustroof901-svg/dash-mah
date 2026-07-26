@@ -14,6 +14,11 @@ export function odooConfig() {
   if (!base || !key) {
     throw new Error("ODOO_API_URL / ODOO_API_TOKEN are not set in the environment.");
   }
+  if (!/^https?:\/\//i.test(base)) {
+    throw new Error(
+      `ODOO_API_URL must be the full https URL (got "${base}"). It looks like the URL and token env vars are swapped in Vercel.`
+    );
+  }
   return { base: base.replace(/\/+$/, ""), key, filter, path, excludeBranches };
 }
 
