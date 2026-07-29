@@ -48,13 +48,20 @@ export default function SummaryPage() {
     setLoading(true);
     setError(null);
     fetch(`/api/summary?${query}`)
-      .then((r) => r.json())
+      .then(async (r) => {
+        const text = await r.text();
+        try {
+          return JSON.parse(text) as SummaryResp;
+        } catch {
+          throw new Error(r.status === 504 ? "Timed out loading summary — try again." : `Server error (${r.status}).`);
+        }
+      })
       .then((j: SummaryResp) => {
         if (!alive) return;
         if (j.ok) setData(j);
         else setError(j.error || "Failed to load summary");
       })
-      .catch((e) => alive && setError(String(e)))
+      .catch((e) => alive && setError(e instanceof Error ? e.message : String(e)))
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;

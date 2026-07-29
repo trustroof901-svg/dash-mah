@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { fetchOdooInvoices, aggregateOffline, odooConfig } from "@/lib/odoo";
+import { fetchOdooInvoices, aggregateOffline, aggregateOfflineByBranch, odooConfig } from "@/lib/odoo";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -37,15 +37,25 @@ async function handle(req: NextRequest) {
     const { filter, excludeBranches } = odooConfig();
     const rows = await fetchOdooInvoices(from, to);
     const days = aggregateOffline(rows, filter, excludeBranches);
+    const branchDays = aggregateOfflineByBranch(rows, filter, excludeBranches);
 
     const sb = createServiceClient();
+    const now = new Date().toISOString();
     if (days.length) {
-      const now = new Date().toISOString();
       const { error } = await sb
         .from("offline_sales")
         .upsert(
           days.map((d) => ({ ...d, updated_at: now })),
           { onConflict: "day" }
+        );
+      if (error) throw error;
+    }
+    if (branchDays.length) {
+      const { error } = await sb
+        .from("offline_branch_sales")
+        .upsert(
+          branchDays.map((d) => ({ ...d, updated_at: now })),
+          { onConflict: "day,branch" }
         );
       if (error) throw error;
     }
@@ -56,6 +66,7 @@ async function handle(req: NextRequest) {
       to,
       totalLines: rows.length,
       daysUpserted: days.length,
+      branchRows: branchDays.length,
       invoices: days.reduce((s, d) => s + d.invoices, 0),
       amount: days.reduce((s, d) => s + d.amount, 0),
     });

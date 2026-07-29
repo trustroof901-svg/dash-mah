@@ -99,6 +99,46 @@ export interface OfflineDay {
   items: number;
 }
 
+export interface OfflineBranchDay {
+  day: string;
+  branch: string;
+  orders: number;
+  value: number;
+}
+
+/**
+ * Per-day, per-branch offline totals (online/shopify branch excluded).
+ * orders = distinct non-refund invoices; value = refund-signed sum.
+ * Stored in offline_branch_sales so the Summary page reads Supabase (fast)
+ * instead of hitting Odoo live (which times out on Vercel).
+ */
+export function aggregateOfflineByBranch(
+  rows: OdooInvoiceLine[],
+  filter: string,
+  excludeBranches: string[] = []
+): OfflineBranchDay[] {
+  const f = filter.trim().toLowerCase();
+  const skip = new Set(excludeBranches.map((b) => b.toLowerCase()));
+  const map = new Map<string, { orders: Set<string>; value: number }>();
+  for (const r of rows) {
+    if (f && !(r.customer_type ?? "").toLowerCase().includes(f)) continue;
+    if (skip.size && skip.has((r.branch ?? "").toLowerCase())) continue;
+    const day = (r.invoice_date ?? "").slice(0, 10);
+    const branch = r.branch ?? "";
+    if (!day || !branch) continue;
+    const key = `${day}|${branch}`;
+    const e = map.get(key) ?? { orders: new Set<string>(), value: 0 };
+    const refund = isRefund(r.invoice_number);
+    e.value += Number(r.price_total || 0) * (refund ? -1 : 1);
+    if (r.invoice_number && !refund) e.orders.add(r.invoice_number);
+    map.set(key, e);
+  }
+  return [...map.entries()].map(([k, e]) => {
+    const [day, branch] = k.split("|");
+    return { day, branch, orders: e.orders.size, value: e.value };
+  });
+}
+
 /**
  * Aggregate invoice lines into daily offline totals for the given customer
  * type (matched on the customer_type field). Invoices = distinct

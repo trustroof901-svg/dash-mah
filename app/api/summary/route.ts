@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchOdooInvoices, odooConfig, isRefund } from "@/lib/odoo";
 import { createServiceClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +28,6 @@ function ymd(d: Date) {
 
 export async function GET(req: NextRequest) {
   try {
-    const { filter, excludeBranches } = odooConfig();
     const sp = req.nextUrl.searchParams;
     const day = sp.get("day");
     const from = sp.get("from") || day || ymd(new Date());
@@ -43,19 +41,21 @@ export async function GET(req: NextRequest) {
     const lmEnd = ymd(new Date(Date.UTC(lm.getUTCFullYear(), lm.getUTCMonth() + 1, 0)));
 
     const fetchFrom = [from, monthStart, lmStart].sort()[0];
+    const sb = createServiceClient();
 
-    // --- Branches: Odoo invoices, online (shopify) branch excluded ---
-    const rows = await fetchOdooInvoices(fetchFrom, to);
-    const f = filter.trim().toLowerCase();
-    const skip = new Set(excludeBranches.map((b) => b.toLowerCase()));
-    const est = rows.filter(
-      (r) =>
-        (!f || (r.customer_type ?? "").toLowerCase().includes(f)) &&
-        !skip.has((r.branch ?? "").toLowerCase())
+    // --- Branches: pre-aggregated per-day/branch (offline_branch_sales).
+    // orders already exclude refunds; value is refund-signed. Read from
+    // Supabase — fast — instead of hitting Odoo live (which times out). ---
+    const { data: brData } = await sb
+      .from("offline_branch_sales")
+      .select("day,branch,orders,value")
+      .gte("day", fetchFrom)
+      .lte("day", to);
+    const branchRows = ((brData ?? []) as { day: string; branch: string; orders: number; value: number }[]).map(
+      (r) => ({ ...r, label: branchLabel(r.branch) })
     );
 
     // --- Online: Shopify daily_metrics (same source as the dashboard) ---
-    const sb = createServiceClient();
     const { data: dmRows } = await sb
       .from("daily_metrics")
       .select("day,total_sales,orders_count")
@@ -64,25 +64,20 @@ export async function GET(req: NextRequest) {
     const online = (dmRows ?? []) as { day: string; total_sales: number; orders_count: number }[];
 
     // Channels: physical branches (sorted) first, then Website (online).
-    const branchLabels = [...new Set(est.map((r) => branchLabel(r.branch ?? "")))].sort((a, b) =>
-      a.localeCompare(b)
-    );
+    const branchLabels = [...new Set(branchRows.map((r) => r.label))].sort((a, b) => a.localeCompare(b));
     const channels = [
       ...branchLabels.map((label) => ({ label, type: "Branches" as const })),
       { label: WEBSITE, type: "Online" as const },
     ];
 
     const periodAgg = (pf: string, pt: string) => {
-      const res: Record<string, { orders: Set<string>; value: number }> = {};
-      for (const label of branchLabels) res[label] = { orders: new Set(), value: 0 };
-      // Branches from Odoo — refunds (R-prefix) subtract and aren't counted as orders.
-      for (const r of est) {
-        const d = (r.invoice_date ?? "").slice(0, 10);
+      const res: Record<string, { orders: number; value: number }> = {};
+      for (const label of branchLabels) res[label] = { orders: 0, value: 0 };
+      for (const r of branchRows) {
+        const d = (r.day ?? "").slice(0, 10);
         if (d < pf || d > pt) continue;
-        const label = branchLabel(r.branch ?? "");
-        const refund = isRefund(r.invoice_number);
-        res[label].value += Number(r.price_total || 0) * (refund ? -1 : 1);
-        if (!refund) res[label].orders.add(r.invoice_number);
+        res[r.label].orders += Number(r.orders || 0);
+        res[r.label].value += Number(r.value || 0);
       }
       // Online from Shopify daily_metrics
       let webOrders = 0;
@@ -98,8 +93,8 @@ export async function GET(req: NextRequest) {
       let tOrders = 0;
       let tValue = 0;
       for (const label of branchLabels) {
-        out[label] = { orders: res[label].orders.size, value: res[label].value };
-        tOrders += res[label].orders.size;
+        out[label] = { orders: res[label].orders, value: res[label].value };
+        tOrders += res[label].orders;
         tValue += res[label].value;
       }
       out[WEBSITE] = { orders: webOrders, value: webValue };
