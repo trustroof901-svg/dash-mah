@@ -3,7 +3,9 @@
 export function odooConfig() {
   const base = process.env.ODOO_API_URL || process.env.ODOO_BASE_URL;
   const key = process.env.ODOO_API_TOKEN || process.env.ODOO_API_KEY;
-  const filter = process.env.ODOO_CUSTOMER_FILTER ?? "استهلاكي";
+  // Empty (default) = include ALL customer types (استهلاكي + تجاري), matching
+  // the ops sheet. Set ODOO_CUSTOMER_FILTER to restrict to one type.
+  const filter = process.env.ODOO_CUSTOMER_FILTER ?? "";
   const path = process.env.ODOO_INVOICES_PATH || "/api/nshome/invoices";
   // Branches that are actually ONLINE (Shopify) — excluded from offline totals
   // so we don't double-count orders already in the Shopify online numbers.
