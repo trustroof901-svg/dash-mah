@@ -26,6 +26,9 @@ function yesterdayStr() {
 }
 const money = (n: number) => fmtNum(Math.round(n));
 
+// Uniform brown gridline on every cell.
+const BORDER = "border border-[#8a5730]";
+
 export default function SummaryPage() {
   const [mode, setMode] = useState<"day" | "range">("day");
   const [day, setDay] = useState(yesterdayStr());
@@ -85,13 +88,13 @@ export default function SummaryPage() {
         <div className="inline-flex overflow-hidden rounded-lg border border-gray-300 text-sm">
           <button
             onClick={() => setMode("day")}
-            className={`px-3 py-1.5 font-medium ${mode === "day" ? "bg-indigo-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+            className={`px-3 py-1.5 font-medium ${mode === "day" ? "bg-[#6f4423] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
           >
             Single day
           </button>
           <button
             onClick={() => setMode("range")}
-            className={`px-3 py-1.5 font-medium ${mode === "range" ? "bg-indigo-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+            className={`px-3 py-1.5 font-medium ${mode === "range" ? "bg-[#6f4423] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
           >
             Range
           </button>
@@ -128,30 +131,29 @@ export default function SummaryPage() {
       {!data || cols.length === 0 ? (
         <EmptyState loading={loading} label="No data for this selection." />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-orange-300/70 shadow-sm ring-1 ring-black/5">
+        <div className="overflow-hidden rounded-xl border-2 border-[#5c3a1e]">
           <table className="w-full table-fixed border-collapse text-center text-[11px] leading-tight sm:text-sm">
             <colgroup>
-              <col className="w-[26%] sm:w-[24%]" />
+              <col className="w-[27%] sm:w-[24%]" />
             </colgroup>
             <tbody>
               <HeaderRow
                 label="Channel"
                 cols={cols}
-                top
                 render={(c) => (c === "Total" ? "Total" : data.channels.find((x) => x.label === c)?.type ?? "")}
               />
               <HeaderRow
                 label="Location"
                 cols={cols}
-                render={(c) => (c === "Total" ? String(data.channels.length) : c)}
+                render={(c) => (c === "Total" ? "All" : c)}
                 strong
               />
-              <DataRow label={<>Orders <span className="opacity-70">{periodLabel}</span></>} cols={cols} block={data.period} kind="orders" />
-              <DataRow label={<>Value <span className="opacity-70">{periodLabel}</span></>} cols={cols} block={data.period} kind="value" />
-              <DataRow label="MTD Orders" cols={cols} block={data.mtd} kind="orders" compareBlock={data.lastMonth} groupTop />
+              <DataRow label={<>Orders <span className="font-normal opacity-80">{periodLabel}</span></>} cols={cols} block={data.period} kind="orders" />
+              <DataRow label={<>Value <span className="font-normal opacity-80">{periodLabel}</span></>} cols={cols} block={data.period} kind="value" />
+              <DataRow label="MTD Orders" cols={cols} block={data.mtd} kind="orders" compareBlock={data.lastMonth} />
               <DataRow label="MTD Value" cols={cols} block={data.mtd} kind="value" compareBlock={data.lastMonth} />
               <DataRow label="Avg Order Value" cols={cols} block={aov} kind="value" accent />
-              <DataRow label="Orders Last Month" cols={cols} block={data.lastMonth} kind="orders" groupTop muted />
+              <DataRow label="Orders Last Month" cols={cols} block={data.lastMonth} kind="orders" muted />
               <DataRow label="Amount Last Month" cols={cols} block={data.lastMonth} kind="value" muted />
             </tbody>
           </table>
@@ -161,8 +163,8 @@ export default function SummaryPage() {
       {/* Legend */}
       {data && (
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500">
-          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-400" /> MTD above last month</span>
-          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-rose-400" /> MTD below last month</span>
+          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-500" /> MTD above last month</span>
+          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-rose-500" /> MTD below last month</span>
           <span>· Avg Order Value = MTD value ÷ orders</span>
           {loading && <span className="text-gray-400">· Refreshing…</span>}
         </div>
@@ -175,26 +177,22 @@ function HeaderRow({
   label,
   cols,
   render,
-  top,
   strong,
 }: {
   label: string;
   cols: string[];
   render: (c: string) => string;
-  top?: boolean;
   strong?: boolean;
 }) {
   return (
     <tr>
-      <th className={`border-b border-orange-300/50 bg-gradient-to-r from-orange-500 to-orange-400 px-2 py-2 text-left font-bold text-white sm:px-4 ${top ? "rounded-tl-2xl" : ""}`}>
-        {label}
-      </th>
-      {cols.map((c, i) => (
+      <th className={`${BORDER} bg-[#6f4423] px-2 py-2.5 text-left font-bold text-white sm:px-4`}>{label}</th>
+      {cols.map((c) => (
         <th
           key={c}
-          className={`border-b border-l border-gray-200 px-1 py-2 font-bold sm:px-3 ${
-            c === "Total" ? "bg-slate-100 text-slate-700" : "bg-orange-50/40 text-gray-700"
-          } ${strong ? "text-[13px] sm:text-base" : ""} ${top && i === cols.length - 1 ? "rounded-tr-2xl" : ""}`}
+          className={`${BORDER} px-1 py-2.5 font-bold sm:px-3 ${
+            c === "Total" ? "bg-[#e7dccb] text-[#4a2f16]" : "bg-[#f4ebe1] text-[#5c3a1e]"
+          } ${strong ? "text-[13px] sm:text-base" : ""}`}
         >
           {render(c)}
         </th>
@@ -211,40 +209,41 @@ function DataRow({
   compareBlock,
   accent,
   muted,
-  groupTop,
 }: {
   label: React.ReactNode;
   cols: string[];
   block: Block;
   kind: "orders" | "value";
-  compareBlock?: Block; // when set: green if cell > compare, red if less (vs last month)
-  accent?: boolean; // subtle highlight row (e.g. Avg Order Value)
-  muted?: boolean; // dimmer rows (last month)
-  groupTop?: boolean; // thicker top border to separate groups
+  compareBlock?: Block; // green if > last month, red if less
+  accent?: boolean; // Avg Order Value highlight
+  muted?: boolean; // last-month rows
 }) {
-  const sep = groupTop ? "border-t-2 border-t-orange-200" : "";
   return (
-    <tr className={sep}>
-      <th className={`bg-gradient-to-r from-orange-500 to-orange-400 px-2 py-2 text-left align-middle font-semibold text-white sm:px-4 ${accent ? "italic" : ""}`}>
+    <tr>
+      <th className={`${BORDER} bg-[#6f4423] px-2 py-2.5 text-left align-middle font-semibold text-white sm:px-4 ${accent ? "italic" : ""}`}>
         {label}
       </th>
       {cols.map((c) => {
         const cell = block[c];
         const v = cell ? (kind === "orders" ? cell.orders : cell.value) : 0;
         const isTotal = c === "Total";
-        let cls = "";
+        let cls = "bg-white text-gray-800";
         if (compareBlock) {
           const cc = compareBlock[c];
           const cv = cc ? (kind === "orders" ? cc.orders : cc.value) : 0;
-          if (v > cv) cls = isTotal ? "bg-emerald-500 font-bold text-white" : "bg-emerald-50 font-semibold text-emerald-700";
-          else if (v < cv) cls = isTotal ? "bg-rose-500 font-bold text-white" : "bg-rose-50 font-semibold text-rose-700";
-          else cls = isTotal ? "bg-slate-100 font-bold" : "";
-        } else {
-          cls = isTotal ? "bg-slate-100 font-bold" : accent ? "bg-amber-50/60 text-amber-800" : muted ? "text-gray-500" : "";
-          if (v < 0) cls += " text-rose-600";
+          if (v > cv) cls = isTotal ? "bg-emerald-600 font-bold text-white" : "bg-emerald-50 font-semibold text-emerald-700";
+          else if (v < cv) cls = isTotal ? "bg-rose-600 font-bold text-white" : "bg-rose-50 font-semibold text-rose-700";
+          else cls = isTotal ? "bg-[#e7dccb] font-bold text-[#4a2f16]" : "bg-white text-gray-800";
+        } else if (isTotal) {
+          cls = "bg-[#e7dccb] font-bold text-[#4a2f16]";
+        } else if (accent) {
+          cls = "bg-[#faf3e8] font-semibold text-[#6f4423]";
+        } else if (muted) {
+          cls = "bg-white text-gray-500";
         }
+        if (v < 0 && !cls.includes("text-white")) cls += " !text-rose-600";
         return (
-          <td key={c} className={`border-l border-t border-gray-100 px-1 py-2 font-medium tabular-nums sm:px-3 ${cls}`}>
+          <td key={c} className={`${BORDER} px-1 py-2.5 font-medium tabular-nums sm:px-3 ${cls}`}>
             {kind === "orders" ? fmtNum(v) : money(v)}
           </td>
         );
